@@ -1,0 +1,5 @@
+/Listings/*
+/Objects/*
+/MDK-ARM/DebugConfig/*.dbgconf
+/MDK-ARM/JLinkLog.txt
+/MDK-ARM/xy-axis.uvguix.BSI
