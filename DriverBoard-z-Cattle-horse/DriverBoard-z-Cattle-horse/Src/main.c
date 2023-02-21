@@ -127,6 +127,12 @@ typedef enum{
 
 /* 私有变量 ------------------------------------------------------------------*/
 /* 发送缓冲区初始化 */
+#define RX_MAX_COUNT           255  // 串口接收最大字节数
+
+/* 私有变量 ------------------------------------------------------------------*/
+__IO uint8_t aRxBuffer[RX_MAX_COUNT]={0}; // 接收缓冲区
+__IO uint16_t RxCount1=0;                  // 已接收到的字节数
+__IO uint8_t Frame_flag=0;                // 帧标志：1：一个新的数据帧  0：无数据帧
 long double Tx_Buffer[7] = {0};
 long double Rx_Buffer[7] = {0};
 uint8_t cal_flag = 0;
@@ -254,6 +260,7 @@ void FillBuf(uint8_t* buf,uint8_t Code)
   */
 int main(void)
 {
+	uint8_t txbuf[50];
   uint16_t crc_check = 0;
   uint8_t Ex_code = 0,i=0;
 
@@ -264,7 +271,7 @@ int main(void)
 	SystemClock_Config();
   
   /* 板载串口log初始化 */
-  USARTx_Init();
+  MX_RS485_USARTx_Init();
   /* 板载SPIFlash初始化 */
   MX_SPIFlash_Init();
   /* Get SPI Flash Device ID */
@@ -272,18 +279,21 @@ int main(void)
 	DeviceID = SPI_FLASH_ReadDeviceID();
   /* Get SPI Flash ID */
 	FlashID = SPI_FLASH_ReadID();
-  printf("FlashID is 0x%X,  Manufacturer Device ID is 0x%X\n", FlashID, DeviceID);
+	memcpy(txbuf,"检测到华邦串行flash\n",50);
+  TX_MODE();
+  HAL_UART_Transmit(&huartx_RS485,txbuf,strlen((char *)txbuf),1000);
+ // printf("FlashID is 0x%X,  Manufacturer Device ID is 0x%X\n", FlashID, DeviceID);
 	/* Check the SPI Flash ID */
 	if (FlashID == SPI_FLASH_ID)  /* #define  sFLASH_ID  0XEF4018 */
 	{	
-		printf("检测到华邦串行flash W25Q16 !\n");
+		//printf("检测到华邦串行flash W25Q16 !\n");
 		
 		SPI_FLASH_BufferRead(&cal_flag, 0, 1);
     if( cal_flag == 0x55)
     {      
         SPI_FLASH_BufferRead((void*)Tx_Buffer, 1, sizeof(Tx_Buffer));
-        for(i=0;i<7;i++ )
-          printf("rx = %LF \n",Tx_Buffer[i]);
+       // for(i=0;i<7;i++ )
+         // printf("rx = %LF \n",Tx_Buffer[i]);
     }    
     else
     {
@@ -296,13 +306,13 @@ int main(void)
       
       SPI_FLASH_BufferWrite((void*)Tx_Buffer, 1, sizeof(Tx_Buffer));
       
-      for(i=0; i<7;i++ )
-        printf("tx = %LF \n",Tx_Buffer[i]);
+     // for(i=0; i<7;i++ )
+       // printf("tx = %LF \n",Tx_Buffer[i]);
     } 
 	}
 	else
 	{    
-		printf("获取不到 W25Q128 ID!\n");
+		//printf("获取不到 W25Q128 ID!\n");
 	}
 	
   /* ADC 初始化 */
@@ -343,8 +353,8 @@ int main(void)
   PduData.PtrHoldingbase = (uint16_t*)malloc(sizeof(uint16_t)*0x125);
   FillBuf((uint8_t*)PduData.PtrHoldingbase,FUN_CODE_03H);
   
-  printf(" -------启用Modbus通信协议------ \n");
-  printf("xy-drive  Modbus从机  RTU通信模式\n");
+  //printf(" -------启用Modbus通信协议------ \n");
+  //printf("xy-drive  Modbus从机  RTU通信模式\n");
   Rx_MSG = MSG_IDLE;
 
 	/* 板载按键引脚初始化配置 */
@@ -377,7 +387,18 @@ int main(void)
 //	STEPMOTOR_LSCMoveRel(SM1, fabs(STEP), ACCEL, DECEL, MOTORSPEED); 
 //	STEPMOTOR_LSCMoveRel(SM2, fabs(STEP), ACCEL, DECEL, MOTORSPEED); 
 //	LAMP_StateSet(LAMP_OFF);
+ 
+memcpy(txbuf,"这是一个串口中断接收回显实验\n",50);
+  TX_MODE();
+  HAL_UART_Transmit(&huartx_RS485,txbuf,strlen((char *)txbuf),1000);
+  
+  memcpy(txbuf,"输入数据并以回车键结束\n",100);
+  HAL_UART_Transmit(&huartx_RS485,txbuf,strlen((char *)txbuf),1000);
 
+  /* 使能接收中断 */	
+  __HAL_UART_ENABLE_IT(&huartx_RS485,UART_IT_RXNE);
+		
+  RX_MODE();
 /* 无限循环 */
 	while (1)
 	{
@@ -388,15 +409,15 @@ int main(void)
       float temp = 0;
       temp = get_ntc_t_val();
 
-      printf("电源电压=%0.1fV, NTC=%0.0fΩ, T=%0.1f℃.\r\n", 
-             get_vbus_val(), get_ntc_r_val(), temp);
+    //  printf("电源电压=%0.1fV, NTC=%0.0fΩ, T=%0.1f℃.\r\n", 
+           //  get_vbus_val(), get_ntc_r_val(), temp);
       
       if (temp < TEMP_MIN || temp > TEMP_MAX)    // 判断是不是超过限定的值
       {
         if (cont_max_count++ > 5)    // 连续5次超过
         {
           cont_max_count = 0;
-          printf("温度超过限制！请检查原因！\r\n");
+         // printf("温度超过限制！请检查原因！\r\n");
 //          while(1);
         }
       }
@@ -446,15 +467,15 @@ int main(void)
 		if(state==1)
     {
       state=0;
-        if(MB_Effect(&PduData))
-            printf("Effect function running Error!!!\n Please check!\n");
+       // if(MB_Effect(&PduData))
+           // printf("Effect function running Error!!!\n Please check!\n");
     }
     /* 接收到一帧的数据,对缓存提取数据 */
     if(Rx_MSG == MSG_COM)
     {
       for(i=0;i<8;i++)
       {
-        printf("Rx_Buf[%d]=%d\n",i,Rx_Buf[i]);
+       // printf("Rx_Buf[%d]=%d\n",i,Rx_Buf[i]);
       }      
       /* 收到非本机地址的响应请求 */
       if((Rx_Buf[0] != MB_SLAVEADDR )&&(Rx_Buf[0] != MB_ALLSLAVEADDR))
@@ -982,6 +1003,36 @@ void HAL_TIM_Base_MspDeInit(TIM_HandleTypeDef* htim_base)
     HAL_NVIC_DisableIRQ(GENERAL_TIM_IRQ);
   }
 } 
+/**
+  * 函数功能: 串口中断服务函数
+  * 输入参数: 无
+  * 返 回 值: 无
+  * 说    明：无
+  */
+void MX_RS485_UARTx_IRQHandler(void)
+{
+	if(__HAL_USART_GET_FLAG(&huartx_RS485,USART_FLAG_RXNE)!= RESET) // 接收中断：接收到数据
+	{
+		uint8_t data;
+		data=READ_REG(huartx_RS485.Instance->DR); // 读取数据
+		if(RxCount1==0) // 如果是重新接收到数据帧，开启串口空闲中断
+		{
+			__HAL_UART_CLEAR_FLAG(&huartx_RS485,USART_FLAG_IDLE); // 清除空闲中断标志
+		  __HAL_UART_ENABLE_IT(&huartx_RS485,UART_IT_IDLE);     // 使能空闲中断	    
+		}
+		if(RxCount1<RX_MAX_COUNT)    // 判断接收缓冲区未满
+		{
+			aRxBuffer[RxCount1]=data;  // 保存数据
+			RxCount1++;                // 增加接收字节数计数
+		}
+	}
+	else	if(__HAL_USART_GET_FLAG(&huartx_RS485,USART_FLAG_IDLE)!= RESET) // 串口空闲中断
+	{
+		__HAL_UART_CLEAR_FLAG(&huartx_RS485,USART_FLAG_IDLE); // 清除空闲中断标志
+		__HAL_UART_DISABLE_IT(&huartx_RS485,UART_IT_IDLE);    // 关闭空闲中断
+		Frame_flag=1;		                                 // 数据帧置位，标识接收到一个完整数据帧
+	}
+}
 
 /********** (C) COPYRIGHT Superior Synthesis Biotechnology *****END OF FILE****/
 
